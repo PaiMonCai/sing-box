@@ -21,10 +21,6 @@ import (
 )
 
 func (l *Listener) ListenTCP() (net.Listener, error) {
-	//nolint:staticcheck
-	if l.listenOptions.ProxyProtocol || l.listenOptions.ProxyProtocolAcceptNoHeader {
-		return nil, E.New("Proxy Protocol is deprecated and removed in sing-box 1.6.0")
-	}
 	var err error
 	bindAddr := M.SocksaddrFrom(l.listenOptions.Listen.Build(netip.AddrFrom4([4]byte{127, 0, 0, 1})), l.listenOptions.ListenPort)
 	var listenConfig net.ListenConfig
@@ -73,6 +69,15 @@ func (l *Listener) ListenTCP() (net.Listener, error) {
 	})
 	if err != nil {
 		return nil, err
+	}
+	wrappedListener, err := wrapProxyProtocolListener(tcpListener, l.listenOptions)
+	if err != nil {
+		_ = tcpListener.Close()
+		return nil, err
+	}
+	tcpListener = wrappedListener
+	if l.listenOptions.ProxyProtocol || l.listenOptions.ProxyProtocolAcceptNoHeader {
+		l.logger.Info("proxy protocol enabled with trusted upstreams")
 	}
 	l.logger.Info("tcp server started at ", tcpListener.Addr())
 	l.tcpListener = tcpListener
