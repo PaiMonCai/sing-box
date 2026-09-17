@@ -75,9 +75,11 @@ type ListenOptions struct {
 	Detour               string             `json:"detour,omitempty"`
 
 	// TX extension: Proxy Protocol is only accepted from explicitly trusted peers.
-	ProxyProtocol               bool     `json:"proxy_protocol,omitempty"`
-	ProxyProtocolAcceptNoHeader bool     `json:"proxy_protocol_accept_no_header,omitempty"`
-	ProxyProtocolTrustedCIDRs   []string `json:"proxy_protocol_trusted_cidrs,omitempty"`
+	// Keep the CIDR list behind a pointer so ListenOptions remains comparable;
+	// sing-box compares listen option structs in a few compatibility paths.
+	ProxyProtocol               bool      `json:"proxy_protocol,omitempty"`
+	ProxyProtocolAcceptNoHeader bool      `json:"proxy_protocol_accept_no_header,omitempty"`
+	ProxyProtocolTrustedCIDRs   *[]string `json:"proxy_protocol_trusted_cidrs,omitempty"`
 	InboundOptions
 }
 
