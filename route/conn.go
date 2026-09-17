@@ -28,6 +28,23 @@ import (
 
 var _ adapter.ConnectionManager = (*ConnectionManager)(nil)
 
+// targetIPReporter is an optional capability implemented by connection
+// trackers that need the address actually selected by the outbound dialer.
+// It deliberately lives below the public ConnectionTracker interface so
+// existing trackers remain source-compatible.
+type targetIPReporter interface {
+	ReportTargetIP(address netip.Addr)
+}
+
+func reportTargetIP(conn any, address netip.Addr) {
+	if !address.IsValid() {
+		return
+	}
+	if reporter, loaded := common.Cast[targetIPReporter](conn); loaded {
+		reporter.ReportTargetIP(address)
+	}
+}
+
 type ConnectionManager struct {
 	logger      logger.ContextLogger
 	access      sync.Mutex
@@ -117,6 +134,9 @@ func (m *ConnectionManager) NewConnection(ctx context.Context, this N.Dialer, co
 		m.logger.ErrorContext(ctx, err)
 		return
 	}
+	// At this point the outbound dial has selected and connected to one exact
+	// address. Report that address instead of guessing from DNS candidates.
+	reportTargetIP(conn, M.AddrFromNet(remoteConn.RemoteAddr()))
 	err = N.ReportConnHandshakeSuccess(conn, remoteConn)
 	if err != nil {
 		err = E.Cause(err, "report handshake success")
@@ -204,6 +224,17 @@ func (m *ConnectionManager) NewPacketConnection(ctx context.Context, this N.Dial
 			return
 		}
 	}
+	// UDP may be connected or packet-oriented. Prefer the remote address of a
+	// connected UDP socket; otherwise use the exact destination selected by the
+	// serial/listen dialer. For a direct-IP destination, the metadata IP is
+	// already exact. Domain-only paths with no selected address stay unreported.
+	targetAddress := destinationAddress
+	if metadata.UDPConnect && remoteConn != nil {
+		targetAddress = M.AddrFromNet(remoteConn.RemoteAddr())
+	} else if !targetAddress.IsValid() && metadata.Destination.IsIP() {
+		targetAddress = metadata.Destination.Addr
+	}
+	reportTargetIP(conn, targetAddress)
 	err = N.ReportPacketConnHandshakeSuccess(conn, remotePacketConn)
 	if err != nil {
 		conn.Close()
