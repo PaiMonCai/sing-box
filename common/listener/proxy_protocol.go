@@ -15,7 +15,11 @@ func wrapProxyProtocolListener(base net.Listener, listenOptions option.ListenOpt
 		return base, nil
 	}
 
-	policy, err := newProxyProtocolPolicy(listenOptions.ProxyProtocolTrustedCIDRs, listenOptions.ProxyProtocolAcceptNoHeader)
+	var trustedCIDRs []string
+	if listenOptions.ProxyProtocolTrustedCIDRs != nil {
+		trustedCIDRs = *listenOptions.ProxyProtocolTrustedCIDRs
+	}
+	policy, err := newProxyProtocolPolicy(trustedCIDRs, listenOptions.ProxyProtocolAcceptNoHeader)
 	if err != nil {
 		return nil, err
 	}
